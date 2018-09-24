@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"unicode"
 
 	"github.com/ericlagergren/decimal"
 	"github.com/ericlagergren/decimal/math"
@@ -60,6 +61,18 @@ const (
 	Sqrt       Test = "square-root"
 )
 
+const (
+	BasicTypesInputs              Test = "BasicTypesInputs"
+	BasicTypesIntermediate        Test = "BasicTypesIntermediate"
+	Clamping                      Test = "Clamping"
+	MulTrailingZeros              Test = "MulTrailingZeros"
+	Overflow                      Test = "Overflow"
+	Rounding                      Test = "Rounding"
+	TrailingAndLeadingZerosInput  Test = "TrailingAndLeadingZerosInput"
+	TrailingAndLeadingZerosResult Test = "TrailingAndLeadingZerosResult"
+	Underflow                     Test = "Underflow"
+)
+
 func (tst Test) Test(t *testing.T) {
 	t.Parallel() // Call after parsing so we don't goof the scanner.
 	s := open(string(tst))
@@ -104,6 +117,29 @@ var ternary = map[Test]func(z, x, y, u *decimal.Big) *decimal.Big{
 }
 
 func (c *scase) execute(name Test) {
+
+	// Temporary hack: FPTests start with uppercase
+	if unicode.IsUpper(rune(name[0])) {
+		switch c.c.Op {
+		case suite.Add:
+			name = Add
+		case suite.Sub:
+			name = Sub
+		case suite.Mul:
+			name = Mul
+		case suite.Div:
+			name = Quo
+		default:
+			c.t.Skipf("Unsupported operation %s", c.c.Op)
+		}
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			c.t.Errorf("panic: %s: %v", c.c.String(), r)
+		}
+	}()
+
 	if nfn, ok := nilary[name]; ok {
 		c.Check(nfn(c.x))
 	} else if ufn, ok := unary[name]; ok {
@@ -167,18 +203,32 @@ got   : %q (%s:%d)
 }
 
 func open(name string) (c *scanner) {
-	fpath := filepath.Join("_testdata", fmt.Sprintf("%s-tables.gz", name))
-	file, err := os.Open(fpath)
-	if err != nil {
-		panic(err)
-	}
-	gzr, err := gzip.NewReader(file)
-	if err != nil {
-		panic(err)
-	}
-	return &scanner{
-		s:     bufio.NewScanner(gzr),
-		close: func() { gzr.Close(); file.Close() },
+	// Temporary hack: python-generated test cases start with lowercase, GDA FPTest files start with uppercase
+	if unicode.IsLower(rune(name[0])) {
+
+		fpath := filepath.Join("_testdata", fmt.Sprintf("%s-tables.gz", name))
+		file, err := os.Open(fpath)
+		if err != nil {
+			panic(err)
+		}
+		gzr, err := gzip.NewReader(file)
+		if err != nil {
+			panic(err)
+		}
+		return &scanner{
+			s:     bufio.NewScanner(gzr),
+			close: func() { gzr.Close(); file.Close() },
+		}
+	} else {
+		fpath := filepath.Join("suite/_testdata", fmt.Sprintf("%s.fptest", name))
+		file, err := os.Open(fpath)
+		if err != nil {
+			panic(err)
+		}
+		return &scanner{
+			s:     bufio.NewScanner(file),
+			close: func() { file.Close() },
+		}
 	}
 }
 
@@ -255,12 +305,12 @@ func (c *scase) Check(z *decimal.Big) {
 	r := c.R()
 	if !equal(z, r) {
 		c.t.Fatalf(`#%d: %s
-wanted: %q (%s:%d)
-got   : %q (%s:%d)
+wanted: %q (%s:%d,%d)
+got   : %q (%s:%d,%d)
 `,
 			c.i, c.c.ShortString(10000),
-			r, c.flags, -r.Scale(),
-			z, z.Context.Conditions, -z.Scale(),
+			r, c.flags, r.Precision(), -r.Scale(),
+			z, z.Context.Conditions, z.Precision(), -z.Scale(),
 		)
 	}
 }

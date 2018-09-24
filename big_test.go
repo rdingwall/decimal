@@ -33,6 +33,20 @@ func TestBig_SignBit(t *testing.T)    { test.Signbit.Test(t) }
 func TestBig_String(t *testing.T)     { test.CTS.Test(t) }
 func TestBig_Sub(t *testing.T)        { test.Sub.Test(t) }
 
+func TestBig_FPTestBasicTypesInputs(t *testing.T)       { test.BasicTypesInputs.Test(t) }
+func TestBig_FPTestBasicTypesIntermediate(t *testing.T) { test.BasicTypesIntermediate.Test(t) }
+func TestBig_FPTestClamping(t *testing.T)               { test.Clamping.Test(t) }
+func TestBig_FPTestMulTrailingZeros(t *testing.T)       { test.MulTrailingZeros.Test(t) }
+func TestBig_FPTestOverflow(t *testing.T)               { test.Overflow.Test(t) }
+func TestBig_FPTestRounding(t *testing.T)               { test.Rounding.Test(t) }
+func TestBig_FPTestTrailingAndLeadingZerosInput(t *testing.T) {
+	test.TrailingAndLeadingZerosInput.Test(t)
+}
+func TestBig_FPTestTrailingAndLeadingZerosResult(t *testing.T) {
+	test.TrailingAndLeadingZerosResult.Test(t)
+}
+func TestBig_FPTestUnderflow(t *testing.T) { test.Underflow.Test(t) }
+
 var rnd = rand.New(rand.NewSource(0))
 
 func rndn(min, max int) int {
