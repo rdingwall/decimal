@@ -52,14 +52,17 @@ func ParseCases(r io.Reader) (cases []Case, err error) {
 //    prefix       inputs
 //
 type Case struct {
-	Prefix string
-	Prec   int
-	Op     Op
-	Mode   big.RoundingMode
-	Trap   Condition
-	Inputs []Data
-	Output Data
-	Excep  Condition
+	Prefix   string
+	Prec     int
+	Op       Op
+	Mode     big.RoundingMode
+	Trap     Condition
+	Inputs   []Data
+	Output   Data
+	Excep    Condition
+	ID       string
+	MaxScale int
+	MinScale int
 }
 
 // TODO(eric): String should print the same format as the input
@@ -111,7 +114,7 @@ type Data string
 
 // NoData is output when the operation throws some sort of Condition and does
 // not "return" any data.
-const NoData Data = "#"
+const NoData Data = "?"
 
 // IsNaN returns two booleans indicating whether the data is a NaN value and
 // whether it's signaling or not.
@@ -301,9 +304,11 @@ const (
 
 var valToOp = map[string]Op{
 	"+":      Add,
+	"add":    Add,
 	"-":      Sub,
 	"*":      Mul,
 	"/":      Div,
+	"divide": Div,
 	"*-":     FMA,
 	"V":      Sqrt,
 	"%":      Rem,

@@ -2,13 +2,13 @@ package test
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ericlagergren/decimal"
@@ -31,7 +31,7 @@ type Test string
 
 const (
 	Abs        Test = "absolute-value"
-	Add        Test = "addition"
+	Add        Test = "add0.decTest"
 	Class      Test = "class"
 	Cmp        Test = "comparison"
 	CTR        Test = "convert-to-rat"
@@ -58,14 +58,237 @@ const (
 	Signbit    Test = "signbit"
 	Sub        Test = "subtraction"
 	Sqrt       Test = "square-root"
+
+	Divide Test = "ddDivide.decTest"
 )
 
+var skipIt = map[string]struct{}{
+	/* NULL reference, decimal16, decimal32, or decimal128 */
+	"absx900":    struct{}{},
+	"addx9990":   struct{}{},
+	"addx9991":   struct{}{},
+	"clam090":    struct{}{},
+	"clam091":    struct{}{},
+	"clam092":    struct{}{},
+	"clam093":    struct{}{},
+	"clam094":    struct{}{},
+	"clam095":    struct{}{},
+	"clam096":    struct{}{},
+	"clam097":    struct{}{},
+	"clam098":    struct{}{},
+	"clam099":    struct{}{},
+	"clam189":    struct{}{},
+	"clam190":    struct{}{},
+	"clam191":    struct{}{},
+	"clam192":    struct{}{},
+	"clam193":    struct{}{},
+	"clam194":    struct{}{},
+	"clam195":    struct{}{},
+	"clam196":    struct{}{},
+	"clam197":    struct{}{},
+	"clam198":    struct{}{},
+	"clam199":    struct{}{},
+	"comx990":    struct{}{},
+	"comx991":    struct{}{},
+	"cotx9990":   struct{}{},
+	"cotx9991":   struct{}{},
+	"ctmx9990":   struct{}{},
+	"ctmx9991":   struct{}{},
+	"ddabs900":   struct{}{},
+	"ddadd9990":  struct{}{},
+	"ddadd9991":  struct{}{},
+	"ddcom9990":  struct{}{},
+	"ddcom9991":  struct{}{},
+	"ddcot9990":  struct{}{},
+	"ddcot9991":  struct{}{},
+	"ddctm9990":  struct{}{},
+	"ddctm9991":  struct{}{},
+	"dddiv9998":  struct{}{},
+	"dddiv9999":  struct{}{},
+	"dddvi900":   struct{}{},
+	"dddvi901":   struct{}{},
+	"ddfma2990":  struct{}{},
+	"ddfma2991":  struct{}{},
+	"ddfma39990": struct{}{},
+	"ddfma39991": struct{}{},
+	"ddlogb900":  struct{}{},
+	"ddmax900":   struct{}{},
+	"ddmax901":   struct{}{},
+	"ddmxg900":   struct{}{},
+	"ddmxg901":   struct{}{},
+	"ddmin900":   struct{}{},
+	"ddmin901":   struct{}{},
+	"ddmng900":   struct{}{},
+	"ddmng901":   struct{}{},
+	"ddmul9990":  struct{}{},
+	"ddmul9991":  struct{}{},
+	"ddnextm900": struct{}{},
+	"ddnextp900": struct{}{},
+	"ddnextt900": struct{}{},
+	"ddnextt901": struct{}{},
+	"ddqua998":   struct{}{},
+	"ddqua999":   struct{}{},
+	"ddred900":   struct{}{},
+	"ddrem1000":  struct{}{},
+	"ddrem1001":  struct{}{},
+	"ddrmn1000":  struct{}{},
+	"ddrmn1001":  struct{}{},
+	"ddsub9990":  struct{}{},
+	"ddsub9991":  struct{}{},
+	"ddintx074":  struct{}{},
+	"ddintx094":  struct{}{},
+	"divx9998":   struct{}{},
+	"divx9999":   struct{}{},
+	"dvix900":    struct{}{},
+	"dvix901":    struct{}{},
+	"dqabs900":   struct{}{},
+	"dqadd9990":  struct{}{},
+	"dqadd9991":  struct{}{},
+	"dqcom990":   struct{}{},
+	"dqcom991":   struct{}{},
+	"dqcot9990":  struct{}{},
+	"dqcot9991":  struct{}{},
+	"dqctm9990":  struct{}{},
+	"dqctm9991":  struct{}{},
+	"dqdiv9998":  struct{}{},
+	"dqdiv9999":  struct{}{},
+	"dqdvi900":   struct{}{},
+	"dqdvi901":   struct{}{},
+	"dqfma2990":  struct{}{},
+	"dqfma2991":  struct{}{},
+	"dqadd39990": struct{}{},
+	"dqadd39991": struct{}{},
+	"dqlogb900":  struct{}{},
+	"dqmax900":   struct{}{},
+	"dqmax901":   struct{}{},
+	"dqmxg900":   struct{}{},
+	"dqmxg901":   struct{}{},
+	"dqmin900":   struct{}{},
+	"dqmin901":   struct{}{},
+	"dqmng900":   struct{}{},
+	"dqmng901":   struct{}{},
+	"dqmul9990":  struct{}{},
+	"dqmul9991":  struct{}{},
+	"dqnextm900": struct{}{},
+	"dqnextp900": struct{}{},
+	"dqnextt900": struct{}{},
+	"dqnextt901": struct{}{},
+	"dqqua998":   struct{}{},
+	"dqqua999":   struct{}{},
+	"dqred900":   struct{}{},
+	"dqrem1000":  struct{}{},
+	"dqrem1001":  struct{}{},
+	"dqrmn1000":  struct{}{},
+	"dqrmn1001":  struct{}{},
+	"dqsub9990":  struct{}{},
+	"dqsub9991":  struct{}{},
+	"dqintx074":  struct{}{},
+	"dqintx094":  struct{}{},
+	"expx900":    struct{}{},
+	"fmax2990":   struct{}{},
+	"fmax2991":   struct{}{},
+	"fmax39990":  struct{}{},
+	"fmax39991":  struct{}{},
+	"lnx900":     struct{}{},
+	"logx900":    struct{}{},
+	"logbx900":   struct{}{},
+	"maxx900":    struct{}{},
+	"maxx901":    struct{}{},
+	"mxgx900":    struct{}{},
+	"mxgx901":    struct{}{},
+	"mnm900":     struct{}{},
+	"mnm901":     struct{}{},
+	"mng900":     struct{}{},
+	"mng901":     struct{}{},
+	"minx900":    struct{}{},
+	"mulx990":    struct{}{},
+	"mulx991":    struct{}{},
+	"nextm900":   struct{}{},
+	"nextp900":   struct{}{},
+	"nextt900":   struct{}{},
+	"nextt901":   struct{}{},
+	"plu900":     struct{}{},
+	"powx900":    struct{}{},
+	"powx901":    struct{}{},
+	"pwsx900":    struct{}{},
+	"quax1022":   struct{}{},
+	"quax1023":   struct{}{},
+	"quax1024":   struct{}{},
+	"quax1025":   struct{}{},
+	"quax1026":   struct{}{},
+	"quax1027":   struct{}{},
+	"quax1028":   struct{}{},
+	"quax1029":   struct{}{},
+	"quax0a2":    struct{}{},
+	"quax0a3":    struct{}{},
+	"quax998":    struct{}{},
+	"quax999":    struct{}{},
+	"redx900":    struct{}{},
+	"remx1000":   struct{}{},
+	"remx1001":   struct{}{},
+	"rmnx900":    struct{}{},
+	"rmnx901":    struct{}{},
+	"sqtx9900":   struct{}{},
+	"subx9990":   struct{}{},
+	"subx9991":   struct{}{},
+	/* operand range violations, invalid context */
+	"expx901":  struct{}{},
+	"expx902":  struct{}{},
+	"expx903":  struct{}{},
+	"expx905":  struct{}{},
+	"lnx901":   struct{}{},
+	"lnx902":   struct{}{},
+	"lnx903":   struct{}{},
+	"lnx905":   struct{}{},
+	"logx901":  struct{}{},
+	"logx902":  struct{}{},
+	"logx903":  struct{}{},
+	"logx905":  struct{}{},
+	"powx1183": struct{}{},
+	"powx1184": struct{}{},
+	"powx4001": struct{}{},
+	"powx4002": struct{}{},
+	"powx4003": struct{}{},
+	"powx4005": struct{}{},
+	"powx4008": struct{}{},
+	"powx4010": struct{}{},
+	"powx4012": struct{}{},
+	"powx4014": struct{}{},
+	"scbx164":  struct{}{},
+	"scbx165":  struct{}{},
+	"scbx166":  struct{}{},
+	/* skipped for decNumber, too */
+	"powx4302": struct{}{},
+	"powx4303": struct{}{},
+	"powx4342": struct{}{},
+	"powx4343": struct{}{},
+	"pwsx805":  struct{}{},
+	/* disagreement for three arg power */
+	"pwmx325": struct{}{},
+	"pwmx326": struct{}{},
+}
+
 func (tst Test) Test(t *testing.T) {
-	t.Parallel() // Call after parsing so we don't goof the scanner.
+	//t.Parallel() // Call after parsing so we don't goof the scanner.
 	s := open(string(tst))
 	for s.Next() {
-		t.Run(string(tst), func(t *testing.T) {
-			c := s.Case(t)
+		if !strings.HasPrefix(s.s.Text(), "dddiv") && !strings.HasPrefix(s.s.Text(), "add") {
+			t.Logf("Skipping line %s", s.s.Text())
+			continue
+		}
+
+		c := s.Case(t)
+		t.Run(fmt.Sprintf("%s.%s", string(tst), c.c.ID), func(t *testing.T) {
+
+			if _, ok := skipIt[c.c.ID]; ok {
+				t.SkipNow()
+			}
+
+			//ddDivide.decTest.dddiv4007
+			c.t = t
+
+			//fmt.Println(c.c.String())
+			t.Logf("%#v\n", c.c)
 			c.execute(tst)
 		})
 	}
@@ -91,6 +314,7 @@ var binary = map[Test]func(z, x, y *decimal.Big) *decimal.Big{
 	Add:    (*decimal.Big).Add,
 	Mul:    (*decimal.Big).Mul,
 	Quo:    (*decimal.Big).Quo,
+	Divide: (*decimal.Big).Quo,
 	QuoInt: (*decimal.Big).QuoInt,
 	Rem:    (*decimal.Big).Rem,
 	Sub:    (*decimal.Big).Sub,
@@ -109,6 +333,10 @@ func (c *scase) execute(name Test) {
 	} else if ufn, ok := unary[name]; ok {
 		c.Check(ufn(c.z, c.x))
 	} else if bfn, ok := binary[name]; ok {
+		if c.z == nil || c.x == nil || c.y == nil {
+			fmt.Println("🤯")
+			c.t.Fatalf("input was nil: %v", []*decimal.Big{c.z, c.x, c.y})
+		}
 		c.Check(bfn(c.z, c.x, c.y))
 	} else if tfn, ok := ternary[name]; ok {
 		c.Check(tfn(c.z, c.x, c.y, c.u))
@@ -167,18 +395,23 @@ got   : %q (%s:%d)
 }
 
 func open(name string) (c *scanner) {
-	fpath := filepath.Join("_testdata", fmt.Sprintf("%s-tables.gz", name))
+	//fpath := filepath.Join("_testdata", fmt.Sprintf("%s-tables.gz", name))
+	fpath := filepath.Join("_testdata", name)
 	file, err := os.Open(fpath)
 	if err != nil {
 		panic(err)
 	}
-	gzr, err := gzip.NewReader(file)
+	/*gzr, err := gzip.NewReader(file)
 	if err != nil {
 		panic(err)
-	}
+	}*/
 	return &scanner{
-		s:     bufio.NewScanner(gzr),
-		close: func() { gzr.Close(); file.Close() },
+		//s:     bufio.NewScanner(gzr),
+		s: bufio.NewScanner(file),
+		close: func() {
+			//gzr.Close();
+			file.Close()
+		},
 	}
 }
 
@@ -202,6 +435,19 @@ func (c *scanner) Case(t *testing.T) *scase {
 	if err != nil {
 		panic(err)
 	}
+	if strings.HasPrefix(cs.ID, "add") {
+		cs.Prec = 9
+		cs.MaxScale = 384
+		cs.MinScale = -384
+		cs.Mode = big.ToNearestEven
+		cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
+	} else if strings.HasPrefix(cs.ID, "dddiv") {
+		cs.Prec = 16
+		cs.MaxScale = 384
+		cs.MinScale = -384
+		cs.Mode = big.ToNearestEven
+		cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
+	}
 	return parse(t, cs, c.i)
 }
 
@@ -211,6 +457,8 @@ func ctx(c suite.Case) decimal.Context {
 		OperatingMode: decimal.GDA,
 		RoundingMode:  decimal.RoundingMode(c.Mode),
 		Traps:         decimal.Condition(c.Trap),
+		MinScale:      c.MinScale,
+		MaxScale:      c.MaxScale,
 	}
 }
 
@@ -235,7 +483,7 @@ func parse(t *testing.T, c suite.Case, i int) *scase {
 	case 1:
 		s.x, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[0]))
 	default:
-		panic(fmt.Sprintf("%s\n%d inputs", s.c, len(c.Inputs)))
+		t.Errorf("%s\n%d inputs", s.c, len(c.Inputs))
 	}
 	return &s
 }
@@ -254,7 +502,7 @@ func (c *scase) Check(z *decimal.Big) {
 	Helper(c.t)()
 	r := c.R()
 	if !equal(z, r) {
-		c.t.Fatalf(`#%d: %s
+		str := fmt.Sprintf(`#%d: %s
 wanted: %q (%s:%d)
 got   : %q (%s:%d)
 `,
@@ -262,6 +510,7 @@ got   : %q (%s:%d)
 			r, c.flags, -r.Scale(),
 			z, z.Context.Conditions, -z.Scale(),
 		)
+		c.t.Error(str)
 	}
 }
 
@@ -276,7 +525,13 @@ type scase struct {
 }
 
 func (s *scase) R() *decimal.Big {
-	r, _ := decimal.WithContext(s.ctx).SetString(s.r)
+	if suite.Data(s.r) == suite.NoData {
+		return decimal.New(0, 0).SetInf(false)
+	}
+	r, ok := decimal.WithContext(s.ctx).SetString(s.r)
+	if !ok {
+		s.t.Fatalf("SetString(%s) returned failure", s.r)
+	}
 	r.Context.Conditions = s.flags
 	return r
 }

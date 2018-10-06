@@ -33,6 +33,8 @@ func TestBig_SignBit(t *testing.T)    { test.Signbit.Test(t) }
 func TestBig_String(t *testing.T)     { test.CTS.Test(t) }
 func TestBig_Sub(t *testing.T)        { test.Sub.Test(t) }
 
+func TestBig_Divide(t *testing.T) { test.Divide.Test(t) }
+
 var rnd = rand.New(rand.NewSource(0))
 
 func rndn(min, max int) int {

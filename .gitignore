@@ -40,6 +40,8 @@ benchmarks/decbench
 *.xml
 *.class
 *.gz
+*.decTest
+.DS_Store
 internal/nat/
 x.bash
 tags
