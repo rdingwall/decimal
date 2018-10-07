@@ -36,8 +36,8 @@ func ParseCase(data []byte) (c Case, err error) {
         }
         action add_input  { c.Inputs = append(c.Inputs, Data(data[mark:fpc])) }
         action set_output { c.Output = Data(data[mark:fpc]) }
-        action set_excep  {
-			c.Excep = ConditionFromString(string(data[mark:fpc]))
+        action add_excep  {
+          c.Excep |= ConditionFromString(string(data[mark:fpc]))
         }
 
        op = (
@@ -52,6 +52,7 @@ func ParseCase(data []byte) (c Case, err error) {
         condition = (
               'Inexact' # Inexact
             | 'Underflow' # Underflow
+            | 'Rounded' # Underflow
             | 'Overflow' # Overflow
             | 'Division_by_zero' # DivisionByZero
             | 'Invalid_operation' # InvalidOperation
@@ -66,12 +67,12 @@ func ParseCase(data []byte) (c Case, err error) {
 			| '?' # InvalidContext
 			| 'Subnormal' # Subnormal
         );
-        excep = condition* >mark %set_excep;
+        excep = condition >mark %add_excep;
 
 		sign       = '+' | '-';
 		indicator  = 'e' | 'E';
 		exponent   = indicator? sign? digit+;
-        number     = digit+ ('.' digit+)? exponent?;
+        number     = (digit+ '.' digit* | '.' digit+ | digit+) exponent?;
 		nan_prefix = [sSqQ];
 		nan        = (nan_prefix | nan_prefix? 'nan'i | '?');
 		class      = (nan_prefix? 'nan'i | (sign?
@@ -80,11 +81,11 @@ func ParseCase(data []byte) (c Case, err error) {
 				| 'Zero'
 				| 'Infinity')
 		);
-        numeric_string = sign? (
+        numeric_string = '\''? sign? (
 			  nan                  # S, Q, NaN, sNaN, ...
             | ('inf'i 'inity'i?)   # +inf, -inf, ...
             | number               # 10, 10.1, +0e-392, ...
-        );
+        ) '\''?;
         input = numeric_string >mark %add_input;
         output = (numeric_string | '#') >mark %set_output;
 
@@ -97,7 +98,7 @@ func ParseCase(data []byte) (c Case, err error) {
             (input ' ' +)?
             '->' ' '+
             output
-             (' '+ excep)?
+             (' '+ excep)*
         );
 
         write data;

@@ -1,6 +1,7 @@
 package decimal
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -21,6 +22,8 @@ func (c Context) Add(z, x, y *Big) *Big {
 
 	if x.IsFinite() && y.IsFinite() {
 		z.form = finite | c.add(z, x, x.form, y, y.form)
+		fmt.Printf("%v %s\n", z, z.Context.Conditions)
+		defer func() { fmt.Printf("%v %s\n", z, z.Context.Conditions) }()
 		return c.round(z)
 	}
 
@@ -960,10 +963,14 @@ func (c Context) Round(z *Big) *Big {
 
 	zp := z.Precision()
 	if zp <= n {
+		fmt.Println("😨fix 1")
 		return c.fix(z)
 	}
 
+	fmt.Printf("😨before fix 2 %v %s prec=%v\n", z, z.Context.Conditions, z.Precision())
+
 	shift := zp - n
+	fmt.Printf("😨shift=%v\n", shift)
 	if shift > c.maxScale() {
 		return z.xflow(c.minScale(), false, true)
 	}
@@ -972,6 +979,7 @@ func (c Context) Round(z *Big) *Big {
 	z.Context.Conditions |= Rounded
 
 	c.shiftr(z, uint64(shift))
+	fmt.Printf("😨fix 2 %v %s\n", z, z.Context.Conditions)
 	return c.fix(z)
 }
 

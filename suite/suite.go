@@ -116,9 +116,14 @@ type Data string
 // not "return" any data.
 const NoData Data = "?"
 
+func (i Data) TrimQuotes() Data {
+	return Data(strings.Trim(string(i), "'"))
+}
+
 // IsNaN returns two booleans indicating whether the data is a NaN value and
 // whether it's signaling or not.
 func (i Data) IsNaN() (nan, signal bool) {
+	i = i.TrimQuotes()
 	if len(i) == 1 {
 		return (i == "S" || i == "Q"), i == "S"
 	}
@@ -133,6 +138,7 @@ func (i Data) IsNaN() (nan, signal bool) {
 // IsInf returns a boolean indicating whether the data is an Infinity and an
 // int indicating the signedness of the Infinity.
 func (i Data) IsInf() (int, bool) {
+	i = i.TrimQuotes()
 	if len(i) != 4 {
 		return 0, false
 	}
@@ -208,30 +214,30 @@ func (c Condition) String() string {
 }
 
 func ConditionFromString(s string) (r Condition) {
-	for i := range s {
-		r |= valToCondition[s[i]]
+	var ok bool
+	r, ok = valToCondition[s]
+	if !ok {
+		panic(fmt.Errorf("unknown condition '%s'", s))
 	}
-	return r
+	return
 }
 
-var valToCondition = map[byte]Condition{
-	'x': Inexact,
-	'u': Underflow, // tininess and 'extraordinary' error
-	'v': Underflow, // tininess and inexactness after rounding
-	'w': Underflow, // tininess and inexactness prior to rounding
-	'o': Overflow,
-	'z': DivisionByZero,
-	'i': InvalidOperation,
+var valToCondition = map[string]Condition{
+	"Inexact":           Inexact,
+	"Underflow":         Underflow, // tininess and 'extraordinary' error
+	"Overflow":          Overflow,
+	"Division_by_zero":  DivisionByZero,
+	"Invalid_operation": InvalidOperation,
 
 	// custom
-	'c': Clamped,
-	'r': Rounded,
-	'y': ConversionSyntax,
-	'm': DivisionImpossible,
-	'n': DivisionUndefined,
-	't': InsufficientStorage,
-	'?': InvalidContext,
-	's': Subnormal,
+	"Clamped":              Clamped,
+	"Rounded":              Rounded,
+	"Conversion_syntax":    ConversionSyntax,
+	"Division_impossible":  DivisionImpossible,
+	"Division_undefined":   DivisionUndefined,
+	"Insufficient_storage": InsufficientStorage,
+	"Invalid_context":      InvalidContext,
+	"Subnormal":            Subnormal,
 }
 
 var valToMode = map[string]big.RoundingMode{

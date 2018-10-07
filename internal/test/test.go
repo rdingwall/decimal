@@ -31,7 +31,7 @@ type Test string
 
 const (
 	Abs        Test = "absolute-value"
-	Add        Test = "add0.decTest"
+	Add        Test = "add.decTest"
 	Class      Test = "class"
 	Cmp        Test = "comparison"
 	CTR        Test = "convert-to-rat"
@@ -64,6 +64,8 @@ const (
 
 var skipIt = map[string]struct{}{
 	/* NULL reference, decimal16, decimal32, or decimal128 */
+	"add900":     struct{}{},
+	"add901":     struct{}{},
 	"absx900":    struct{}{},
 	"addx9990":   struct{}{},
 	"addx9991":   struct{}{},
@@ -273,12 +275,12 @@ func (tst Test) Test(t *testing.T) {
 	s := open(string(tst))
 	for s.Next() {
 		if !strings.HasPrefix(s.s.Text(), "dddiv") && !strings.HasPrefix(s.s.Text(), "add") {
-			t.Logf("Skipping line %s", s.s.Text())
+			//	t.Logf("Skipping line %s", s.s.Text())
 			continue
 		}
 
 		c := s.Case(t)
-		t.Run(fmt.Sprintf("%s.%s", string(tst), c.c.ID), func(t *testing.T) {
+		t.Run(c.c.ID, func(t *testing.T) {
 
 			if _, ok := skipIt[c.c.ID]; ok {
 				t.SkipNow()
@@ -288,7 +290,7 @@ func (tst Test) Test(t *testing.T) {
 			c.t = t
 
 			//fmt.Println(c.c.String())
-			t.Logf("%#v\n", c.c)
+			//	t.Logf("%#v\n", c.c)
 			c.execute(tst)
 		})
 	}
@@ -334,7 +336,7 @@ func (c *scase) execute(name Test) {
 		c.Check(ufn(c.z, c.x))
 	} else if bfn, ok := binary[name]; ok {
 		if c.z == nil || c.x == nil || c.y == nil {
-			fmt.Println("🤯")
+			//fmt.Println("🤯")
 			c.t.Fatalf("input was nil: %v", []*decimal.Big{c.z, c.x, c.y})
 		}
 		c.Check(bfn(c.z, c.x, c.y))
@@ -435,18 +437,34 @@ func (c *scanner) Case(t *testing.T) *scase {
 	if err != nil {
 		panic(err)
 	}
-	if strings.HasPrefix(cs.ID, "add") {
+	if strings.HasPrefix(cs.ID, "addx") {
+		cs.Prec = 9
+		cs.MaxScale = 384
+		cs.MinScale = -384
+		cs.Mode = big.ToPositiveInf
+
+		switch {
+		case cs.ID >= "addx046" && cs.ID <= "add051":
+			cs.Prec = 15
+		case cs.ID >= "add060" && cs.ID <= "add077":
+			cs.Prec = 6
+
+		case cs.ID >= "add161" && cs.ID <= "add183":
+			cs.Prec = 15
+		}
+		//cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
+	} else if strings.HasPrefix(cs.ID, "add") {
 		cs.Prec = 9
 		cs.MaxScale = 384
 		cs.MinScale = -384
 		cs.Mode = big.ToNearestEven
-		cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
+		//cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
 	} else if strings.HasPrefix(cs.ID, "dddiv") {
 		cs.Prec = 16
 		cs.MaxScale = 384
 		cs.MinScale = -384
 		cs.Mode = big.ToNearestEven
-		cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
+		//	cs.Trap = ^(suite.Inexact | suite.Rounded | suite.Subnormal)
 	}
 	return parse(t, cs, c.i)
 }
@@ -470,20 +488,23 @@ func parse(t *testing.T, c suite.Case, i int) *scase {
 		i:     i,
 		c:     c,
 		z:     decimal.WithContext(ctx),
-		r:     string(c.Output),
+		r:     string(c.Output.TrimQuotes()),
 		flags: decimal.Condition(c.Excep),
+	}
+	if c.ID == "addx257" {
+		t.Logf("😨 %#v", c)
 	}
 	switch len(c.Inputs) {
 	case 3:
-		s.u, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[2]))
+		s.u, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[2].TrimQuotes()))
 		fallthrough
 	case 2:
-		s.y, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[1]))
+		s.y, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[1].TrimQuotes()))
 		fallthrough
 	case 1:
-		s.x, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[0]))
+		s.x, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[0].TrimQuotes()))
 	default:
-		t.Errorf("%s\n%d inputs", s.c, len(c.Inputs))
+		t.Logf("%s\n%d inputs: %#v", s.c, len(c.Inputs), c)
 	}
 	return &s
 }
