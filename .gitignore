@@ -44,3 +44,4 @@ internal/nat/
 x.bash
 tags
 *.decTest
+dectest/parser.go
