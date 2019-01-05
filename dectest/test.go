@@ -1,13 +1,12 @@
 package dectest
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
-	"math/big"
+	"io"
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/ericlagergren/decimal"
@@ -234,9 +233,17 @@ var skipIt = map[string]struct{}{
 func Test(t *testing.T, file string) {
 	//t.Parallel() // Call after parsing so we don't goof the scanner.
 	s := open(file)
-	for s.Next() {
 
-		c := s.Case(t)
+	defer s.Close()
+	cases, err := ParseCases(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, cs := range cases {
+
+		c := parse(t, cs, i)
+
 		t.Run(c.c.ID, func(t *testing.T) {
 
 			if _, ok := skipIt[c.c.ID]; ok {
@@ -254,10 +261,13 @@ func Test(t *testing.T, file string) {
 
 var nilary = map[Op]func(z *decimal.Big) *decimal.Big{}
 
-var unary = map[Op]func(z, x *decimal.Big) *decimal.Big{}
+var unary = map[Op]func(z, x *decimal.Big) *decimal.Big{
+	Apply: (*decimal.Big).Set,
+}
 
 var binary = map[Op]func(z, x, y *decimal.Big) *decimal.Big{
 	Add: (*decimal.Big).Add,
+	Sub: (*decimal.Big).Sub,
 }
 
 var ternary = map[Op]func(z, x, y, u *decimal.Big) *decimal.Big{}
@@ -270,7 +280,9 @@ func (c *scase) execute() {
 	} else if bfn, ok := binary[c.c.Op]; ok {
 		if c.z == nil || c.x == nil || c.y == nil {
 			//fmt.Println("🤯")
-			c.t.Fatalf("input was nil: %v", []*decimal.Big{c.z, c.x, c.y})
+			js, _ := json.Marshal(c.c)
+			c.t.Fatalf("input was nil: %s", js)
+
 		}
 		c.Check(bfn(c.z, c.x, c.y))
 	} else if tfn, ok := ternary[c.c.Op]; ok {
@@ -334,75 +346,12 @@ func (c *scase) execute() {
 	}
 }
 
-func open(fpath string) (c *scanner) {
+func open(fpath string) io.ReadCloser {
 	file, err := os.Open(fpath)
 	if err != nil {
 		panic(err)
 	}
-	/*gzr, err := gzip.NewReader(file)
-	if err != nil {
-		panic(err)
-	}*/
-	return &scanner{
-		//s:     bufio.NewScanner(gzr),
-		s: bufio.NewScanner(file),
-		close: func() {
-			//gzr.Close();
-			file.Close()
-		},
-	}
-}
-
-type scanner struct {
-	i     int
-	s     *bufio.Scanner
-	close func()
-}
-
-func (c *scanner) Next() bool {
-	if !c.s.Scan() {
-		c.close()
-		return false
-	}
-	c.i++
-	return true
-}
-
-func (c *scanner) Case(t *testing.T) *scase {
-	cs, err := ParseCase(c.s.Bytes())
-	if err != nil {
-		panic(err)
-	}
-	if strings.HasPrefix(cs.ID, "addx") {
-		cs.Prec = 9
-		cs.MaxScale = 384
-		cs.MinScale = -384
-		cs.Mode = big.ToPositiveInf
-
-		switch {
-		case cs.ID >= "addx046" && cs.ID <= "add051":
-			cs.Prec = 15
-		case cs.ID >= "add060" && cs.ID <= "add077":
-			cs.Prec = 6
-
-		case cs.ID >= "add161" && cs.ID <= "add183":
-			cs.Prec = 15
-		}
-		//cs.Trap = ^(Inexact | Rounded | Subnormal)
-	} else if strings.HasPrefix(cs.ID, "add") {
-		cs.Prec = 9
-		cs.MaxScale = 384
-		cs.MinScale = -384
-		cs.Mode = big.ToNearestEven
-		//cs.Trap = ^(Inexact | Rounded | Subnormal)
-	} else if strings.HasPrefix(cs.ID, "dddiv") {
-		cs.Prec = 16
-		cs.MaxScale = 384
-		cs.MinScale = -384
-		cs.Mode = big.ToNearestEven
-		//	cs.Trap = ^(Inexact | Rounded | Subnormal)
-	}
-	return parse(t, cs, c.i)
+	return file
 }
 
 func ctx(c Case) decimal.Context {
@@ -426,9 +375,6 @@ func parse(t *testing.T, c Case, i int) *scase {
 		z:     decimal.WithContext(ctx),
 		r:     string(c.Output.TrimQuotes()),
 		flags: decimal.Condition(c.Excep),
-	}
-	if c.ID == "addx257" {
-		t.Logf("😨 %#v", c)
 	}
 	switch len(c.Inputs) {
 	case 3:

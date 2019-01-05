@@ -13,6 +13,12 @@ func TestDecTests(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if len(files) == 0 {
+		t.Skip("No .detect files found, please run _dectests/generate.bash")
+	}
+
+	files = []string{"_dectest/add.decTest"}
+
 	for _, file := range files {
 		file := file // shadow range variable
 		t.Run(filepath.Base(file), func(t *testing.T) {

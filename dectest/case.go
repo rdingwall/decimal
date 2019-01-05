@@ -9,21 +9,110 @@ import (
 	"strings"
 )
 
+var roundingModes = map[string]big.RoundingMode{
+	"ceiling": big.ToPositiveInf,
+
+	// (Round toward 0; truncate.) The discarded digits are ignored; the
+	// result is unchanged.
+	"down": big.ToZero,
+
+	// (Round toward -∞.) If all of the discarded digits are zero or if the sign
+	// is 0 the result is unchanged. Otherwise, the sign is 1 and the result
+	// coefficient should be incremented by 1.
+	"floor": big.ToNegativeInf,
+
+	// If the discarded digits represent greater than half (0.5) the value of a
+	// one in the next left position then the result coefficient should be
+	// incremented by 1 (rounded up). If they represent less than half, then
+	// the result coefficient is not adjusted (that is, the discarded digits are
+	// ignored).
+	"half_even": big.ToNearestEven,
+
+	// If the discarded digits represent greater than or equal to half (0.5) of
+	// the value of a one in the next left position then the result coefficient
+	// should be incremented by 1 (rounded up). Otherwise the discarded
+	// digits are ignored.
+	"half_up": big.ToNearestAway,
+}
+
 // ParseCases returns a slice of test cases in .decTest form read from r.
 func ParseCases(r io.Reader) (cases []Case, err error) {
 	s := bufio.NewScanner(r)
 	s.Split(bufio.ScanLines)
 
+	var precision int
+	var mode big.RoundingMode
+	var maxscale, minscale int
+	var clamp bool
+	var modeUnsupported bool
+
 	for s.Scan() {
 		p := s.Bytes()
 		// Skip empty lines and comments.
-		if len(p) == 0 || p[0] == '#' {
+		if len(p) == 0 || p[0] == '-' {
 			continue
+		}
+
+		fmt.Println(strings.ToLower(string(p)))
+
+		// TODO: ragel-ify: move this state to a scanner.Next() struct
+		var prec int
+		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "precision: %d", &prec); n == 1 {
+			fmt.Printf("😃 Change prec '%d'\n", prec)
+			precision = prec
+		}
+
+		var mxs int
+		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "maxexponent: %d", &mxs); n == 1 {
+			fmt.Printf("😃 Change max scale '%d'\n", mxs)
+			maxscale = mxs
+		}
+
+		var mns int
+		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "minexponent: %d", &mns); n == 1 {
+			fmt.Printf("😃 Change min scale '%d'\n", mns)
+			minscale = mns
+		}
+
+		var cl int
+		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "clamp: %d", &cl); n == 1 {
+			fmt.Printf("😃 Change clamp mode '%d' --> %v\n", cl, clamp)
+			if cl == 1 {
+				clamp = true
+			} else {
+				clamp = false
+			}
+		}
+
+		var rm string
+		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "rounding: %s", &rm); n == 1 {
+			r, ok := roundingModes[rm]
+			fmt.Printf("😃 Change rounding mode '%s' --> %s\n", rm, r)
+			if !ok {
+				// unsupported rounding mode
+				// @TODO: model these unsupported rounding modes and explicitly t.Skip() them
+				modeUnsupported = true
+			} else {
+				mode = r
+				modeUnsupported = false
+			}
 		}
 
 		c, err := ParseCase(p)
 		if err != nil {
 			return nil, err
+		}
+
+		if c.ID == "" || modeUnsupported {
+			continue
+		}
+
+		c.Prec = precision
+		c.Mode = mode
+		c.MaxScale = maxscale
+		c.MinScale = minscale
+		if clamp {
+			c.Trap |= Clamped
 		}
 		cases = append(cases, c)
 	}
@@ -232,117 +321,17 @@ var valToMode = map[string]big.RoundingMode{
 type Op uint8
 
 const (
-	Add         Op = iota // add
-	Sub                   // subtract
-	Mul                   // multiply
-	Div                   // divide
-	FMA                   // fused multiply-add
-	Sqrt                  // square root
-	Rem                   // remainder
-	RFI                   // round float to int
-	CFF                   // convert between floating point formats
-	CFI                   // convert float to integer
-	CIF                   // convert integer to float
-	CFD                   // convert to string
-	CDF                   // convert string to float
-	QuietCmp              // quiet comparison
-	SigCmp                // signaling comparison
-	Copy                  // copy
-	Neg                   // negate
-	Abs                   // absolute value
-	CopySign              // copy sign
-	Scalb                 // scalb
-	Logb                  // logb
-	NextAfter             // next after
-	Class                 // class
-	IsSigned              // is signed
-	IsNormal              // is norm
-	IsInf                 // is inf
-	IsZero                // is zero
-	IsSubNormal           // is subnormal
-	IsNaN                 // is nan
-	IsSignaling           // is signaling
-	IsFinite              // is finite
-	MinNum                // minnum
-	MaxNum                // maxnum
-	MinNumMag             // minnummag
-	MaxNumMag             // maxnummag
-	SameQuantum           // same quantum
-	Quantize              // quantize
-	NextUp                // next up
-	NextDown              // next down
-	Equiv                 // equivalent
-
-	// Custom
-	SetRat
-	Sign
-	Signbit
-	Exp
-	Log
-	Log10
-	Pow
-	IntDiv
-	Normalize
-	RoundToInt
-	Shift
+	Add Op = iota // add
+	Div
+	Sub // subtract
+	Apply
 )
 
 var valToOp = map[string]Op{
-	"+":      Add,
-	"add":    Add,
-	"-":      Sub,
-	"*":      Mul,
-	"/":      Div,
-	"divide": Div,
-	"*-":     FMA,
-	"V":      Sqrt,
-	"%":      Rem,
-	"rfi":    RFI,
-	"cff":    CFF,
-	"cfi":    CFI,
-	"cif":    CIF,
-	"cfd":    CFD,
-	"cdf":    CDF,
-	"qC":     QuietCmp,
-	"sC":     SigCmp,
-	"cp":     Copy,
-	"~":      Neg,
-	"A":      Abs,
-	"@":      CopySign,
-	"S":      Scalb,
-	"L":      Logb,
-	"Na":     NextAfter,
-	"?":      Class,
-	"?-":     IsSigned,
-	"?n":     IsNormal,
-	"?f":     IsFinite,
-	"?0":     IsZero,
-	"?s":     IsSubNormal,
-	"?i":     IsInf,
-	"?N":     IsNaN,
-	"?sN":    IsSignaling,
-	"<C":     MinNum,
-	">C":     MaxNum,
-	"<A":     MinNumMag,
-	">A":     MaxNumMag,
-	"=quant": SameQuantum,
-	"quant":  Quantize,
-	"Nu":     NextUp,
-	"Nd":     NextDown,
-	"eq":     Equiv,
-
-	// Custom
-	"rat":     SetRat,
-	"sign":    Sign,
-	"signbit": Signbit,
-	"exp":     Exp,
-	"log":     Log,
-	"log10":   Log10,
-	"pow":     Pow,
-	"//":      IntDiv,
-	"norm":    Normalize,
-	"rtie":    RoundToInt,
-	"shift":   Shift,
+	"add":      Add,
+	"divide":   Div,
+	"subtract": Sub,
+	"apply":    Apply,
 }
 
 //go:generate stringer -type=Op
