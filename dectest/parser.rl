@@ -40,14 +40,7 @@ func ParseCase(data []byte) (c Case, err error) {
           c.Excep |= ConditionFromString(string(data[mark:fpc]))
         }
 
-       op = (
-            'divide'      # Div
-            | 'add'      # Add
-
-
-			# Custom
-
-        ) >mark %set_op;
+       op = [a-z0-9]+ >mark %set_op;
 
         condition = (
               'Inexact' # Inexact
@@ -72,32 +65,32 @@ func ParseCase(data []byte) (c Case, err error) {
 		sign       = '+' | '-';
 		indicator  = 'e' | 'E';
 		exponent   = indicator? sign? digit+;
-        number     = (digit+ '.' digit* | '.' digit+ | digit+) exponent?;
+        number     = (digit+ '.' digit* | '.' digit+ | digit+ | digit) exponent?;
 		nan_prefix = [sSqQ];
-		nan        = (nan_prefix | nan_prefix? 'nan'i | '?');
-		class      = (nan_prefix? 'nan'i | (sign?
+		nan        = (nan_prefix? 'nan'i digit* | '?');
+		class      = (nan_prefix? 'nan'i | sign? (
 				  'Subnormal'
 				| 'Normal'
 				| 'Zero'
 				| 'Infinity')
 		);
-        numeric_string = '\''? sign? (
+        numeric_string = sign? (
 			  nan                  # S, Q, NaN, sNaN, ...
             | ('inf'i 'inity'i?)   # +inf, -inf, ...
             | number               # 10, 10.1, +0e-392, ...
-        ) '\''?;
-        input = numeric_string >mark %add_input;
-        output = (numeric_string | '#') >mark %set_output;
+        );
+        quote = '\'' | '"';
+        input =  ( numeric_string | '#') >mark %add_input;
+        output = ( numeric_string | class | '#') >mark %set_output;
 
         id = ([a-z0-9]+) >mark %set_id;
 
         main := (
             (id ' '+) # A short name which identifies the test
             (op ' '+) # A case-independent keyword which describes the operation
-            (input ' ' +) # The first (or only) operand required for the operation.
-            (input ' ' +)?
+            (quote? input quote? ' '+)+ # The first (or only) operand required for the operation.
             '->' ' '+
-            output
+            quote? output quote?
              (' '+ excep)*
         );
 

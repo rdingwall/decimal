@@ -53,30 +53,30 @@ func ParseCases(r io.Reader) (cases []Case, err error) {
 			continue
 		}
 
-		fmt.Println(strings.ToLower(string(p)))
+		//fmt.Println(strings.ToLower(string(p)))
 
 		// TODO: ragel-ify: move this state to a scanner.Next() struct
 		var prec int
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "precision: %d", &prec); n == 1 {
-			fmt.Printf("😃 Change prec '%d'\n", prec)
+			//	fmt.Printf("😃 Change prec '%d'\n", prec)
 			precision = prec
 		}
 
 		var mxs int
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "maxexponent: %d", &mxs); n == 1 {
-			fmt.Printf("😃 Change max scale '%d'\n", mxs)
+			//fmt.Printf("😃 Change max scale '%d'\n", mxs)
 			maxscale = mxs
 		}
 
 		var mns int
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "minexponent: %d", &mns); n == 1 {
-			fmt.Printf("😃 Change min scale '%d'\n", mns)
+			//fmt.Printf("😃 Change min scale '%d'\n", mns)
 			minscale = mns
 		}
 
 		var cl int
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "clamp: %d", &cl); n == 1 {
-			fmt.Printf("😃 Change clamp mode '%d' --> %v\n", cl, clamp)
+			//fmt.Printf("😃 Change clamp mode '%d' --> %v\n", cl, clamp)
 			if cl == 1 {
 				clamp = true
 			} else {
@@ -87,7 +87,7 @@ func ParseCases(r io.Reader) (cases []Case, err error) {
 		var rm string
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "rounding: %s", &rm); n == 1 {
 			r, ok := roundingModes[rm]
-			fmt.Printf("😃 Change rounding mode '%s' --> %s\n", rm, r)
+			//fmt.Printf("😃 Change rounding mode '%s' --> %s\n", rm, r)
 			if !ok {
 				// unsupported rounding mode
 				// @TODO: model these unsupported rounding modes and explicitly t.Skip() them
@@ -198,9 +198,11 @@ func (i Data) IsNaN() (nan, signal bool) {
 	if i[0] == '-' {
 		i = i[1:]
 	}
-	return strings.EqualFold(string(i), "nan") ||
-		strings.EqualFold(string(i), "qnan") ||
-		strings.EqualFold(string(i), "snan"), i[0] == 's' || i[0] == 'S'
+	// trim instance number e.g. NaN1
+	s := strings.TrimRight(string(i), "0123456789")
+	return strings.EqualFold(s, "nan") ||
+		strings.EqualFold(s, "qnan") ||
+		strings.EqualFold(s, "snan"), i[0] == 's' || i[0] == 'S'
 }
 
 // IsInf returns a boolean indicating whether the data is an Infinity and an
@@ -323,15 +325,56 @@ type Op uint8
 const (
 	Add Op = iota // add
 	Div
-	Sub // subtract
+	Sub
 	Apply
+	Abs
+	Class
+	Cmp
+	Copy
+	CopySign
+	QuoInt
+	FMA
+	Log
+	Log10
+	Max
+	Min
+	Neg
+	Mul
+	Pow
+	Quantize
+	Reduce
+	Rem
+	Shift
+	RoundToInt
+	Sqrt
 )
 
 var valToOp = map[string]Op{
-	"add":      Add,
-	"divide":   Div,
-	"subtract": Sub,
-	"apply":    Apply,
+	"add":         Add,
+	"divide":      Div,
+	"subtract":    Sub,
+	"apply":       Apply,
+	"abs":         Abs,
+	"class":       Class,
+	"compare":     Cmp,
+	"copy":        Copy,
+	"copysign":    CopySign,
+	"divideint":   QuoInt,
+	"fma":         FMA,
+	"logb":        Log10,
+	"log10":       Log10,
+	"ln":          Log,
+	"max":         Max,
+	"min":         Min,
+	"minus":       Neg,
+	"multiply":    Mul,
+	"power":       Pow,
+	"quantize":    Quantize,
+	"reduce":      Reduce,
+	"remainder":   Rem,
+	"shift":       Shift,
+	"tointegralx": RoundToInt,
+	"squareroot":  Sqrt,
 }
 
 //go:generate stringer -type=Op
