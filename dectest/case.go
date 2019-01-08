@@ -7,9 +7,70 @@ import (
 	"math/big"
 	"math/bits"
 	"strings"
+
+	"github.com/ericlagergren/decimal"
 )
 
-var roundingModes = map[string]big.RoundingMode{
+type RoundingMode int
+
+const (
+	Ceiling RoundingMode = iota
+	Down
+	Floor
+	HalfDown
+	HalfEven
+	HalfUp
+	Up
+	ZeroFiveUp
+)
+
+var roundingModes = map[string]RoundingMode{
+	"ceiling":   Ceiling,
+	"down":      Down,
+	"floor":     Floor,
+	"half_down": HalfDown,
+	"half_even": HalfEven,
+	"half_up":   HalfUp,
+	"up":        Up,
+	"05up":      ZeroFiveUp,
+}
+
+var roundingModesMapping = map[RoundingMode]big.RoundingMode{
+	Ceiling:  big.ToPositiveInf,
+	Down:     big.ToZero,
+	Floor:    big.ToNegativeInf,
+	HalfEven: big.ToNearestEven,
+	HalfUp:   big.ToNearestAway,
+}
+
+var conditionsMapping = map[Condition]decimal.Condition{
+	Clamped:             decimal.Clamped,
+	ConversionSyntax:    decimal.ConversionSyntax,
+	DivisionByZero:      decimal.DivisionByZero,
+	DivisionImpossible:  decimal.DivisionImpossible,
+	DivisionUndefined:   decimal.DivisionUndefined,
+	Inexact:             decimal.Inexact,
+	InsufficientStorage: decimal.InsufficientStorage,
+	InvalidContext:      decimal.InvalidContext,
+	InvalidOperation:    decimal.InvalidOperation,
+	Overflow:            decimal.Overflow,
+	Rounded:             decimal.Rounded,
+	Subnormal:           decimal.Subnormal,
+	Underflow:           decimal.Underflow,
+	// LostDigits:
+}
+
+func convertConditions(c Condition) decimal.Condition {
+	var r decimal.Condition
+	for k, v := range conditionsMapping {
+		if c&k == k {
+			r |= v
+		}
+	}
+	return r
+}
+
+var roundingModesOld = map[string]big.RoundingMode{
 	"ceiling": big.ToPositiveInf,
 
 	// (Round toward 0; truncate.) The discarded digits are ignored; the
@@ -86,7 +147,7 @@ func ParseCases(r io.Reader) (cases []Case, err error) {
 
 		var rm string
 		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "rounding: %s", &rm); n == 1 {
-			r, ok := roundingModes[rm]
+			r, ok := roundingModesOld[rm]
 			//fmt.Printf("😃 Change rounding mode '%s' --> %s\n", rm, r)
 			if !ok {
 				// unsupported rounding mode
@@ -238,6 +299,7 @@ const (
 	Rounded
 	Subnormal
 	Underflow
+	LostDigits
 )
 
 func (c Condition) String() string {
@@ -308,6 +370,35 @@ var valToCondition = map[string]Condition{
 	"Insufficient_storage": InsufficientStorage,
 	"Invalid_context":      InvalidContext,
 	"Subnormal":            Subnormal,
+
+	// @TODO delete above
+	// dectests
+}
+
+var conditions = map[string]Condition{
+	"Clamped":              Clamped,
+	"Conversion_syntax":    ConversionSyntax,
+	"Division_by_zero":     DivisionByZero,
+	"Division_impossible":  DivisionImpossible,
+	"Division_undefined":   DivisionUndefined,
+	"Inexact":              Inexact,
+	"Insufficient_storage": InsufficientStorage,
+	"Invalid_context":      InvalidContext,
+	"Invalid_operation":    InvalidOperation,
+	"Lost_digits":          LostDigits,
+	"Overflow":             Overflow,
+	"Rounded":              Rounded,
+	"Subnormal":            Subnormal,
+	"Underflow":            Underflow,
+}
+
+func conditionFromString(s string) Condition {
+	fmt.Printf("conditionFromString(%s)\n", s)
+	r, ok := conditions[s]
+	if !ok {
+		panic(fmt.Errorf("unknown condition '%s'", s))
+	}
+	return r
 }
 
 var valToMode = map[string]big.RoundingMode{
@@ -350,6 +441,34 @@ const (
 )
 
 var valToOp = map[string]Op{
+	"add":         Add,
+	"divide":      Div,
+	"subtract":    Sub,
+	"apply":       Apply,
+	"abs":         Abs,
+	"class":       Class,
+	"compare":     Cmp,
+	"copy":        Copy,
+	"copysign":    CopySign,
+	"divideint":   QuoInt,
+	"fma":         FMA,
+	"logb":        Log10,
+	"log10":       Log10,
+	"ln":          Log,
+	"max":         Max,
+	"min":         Min,
+	"minus":       Neg,
+	"multiply":    Mul,
+	"power":       Pow,
+	"quantize":    Quantize,
+	"reduce":      Reduce,
+	"remainder":   Rem,
+	"shift":       Shift,
+	"tointegralx": RoundToInt,
+	"squareroot":  Sqrt,
+}
+
+var operations = map[string]Op{
 	"add":         Add,
 	"divide":      Div,
 	"subtract":    Sub,

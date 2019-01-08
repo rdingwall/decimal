@@ -265,6 +265,25 @@ var skipIt = map[string]struct{}{
 }
 
 func Test(t *testing.T, file string) {
+	r := open(file)
+	defer r.Close()
+	s := NewScanner(r)
+	for s.Scan() {
+		c := parse(t, s, s.Case())
+		t.Run(c.c.ID, func(t *testing.T) {
+			if _, ok := skipIt[c.c.ID]; ok {
+				t.SkipNow()
+			}
+			c.t = t
+			c.execute()
+		})
+	}
+	if err := s.Err(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestOld(t *testing.T, file string) {
 	//t.Parallel() // Call after parsing so we don't goof the scanner.
 	s := open(file)
 
@@ -276,7 +295,7 @@ func Test(t *testing.T, file string) {
 
 	for i, cs := range cases {
 
-		c := parse(t, cs, i)
+		c := parseOld(t, cs, i)
 
 		t.Run(c.c.ID, func(t *testing.T) {
 			//t.Parallel()
@@ -415,7 +434,7 @@ func open(fpath string) io.ReadCloser {
 	return file
 }
 
-func ctx(c Case) decimal.Context {
+func ctxOld(c Case) decimal.Context {
 	return decimal.Context{
 		Precision:     c.Prec,
 		OperatingMode: decimal.GDA,
@@ -426,8 +445,54 @@ func ctx(c Case) decimal.Context {
 	}
 }
 
-func parse(t *testing.T, c Case, i int) *scase {
-	ctx := ctx(c)
+func ctx(s *scanner, c *testCase) decimal.Context {
+	return decimal.Context{
+		Precision:     s.precision,
+		OperatingMode: decimal.GDA,
+		RoundingMode:  decimal.RoundingMode(s.rounding),
+		//Traps:         decimal.Condition(c.Trap),
+		MinScale: s.minExponent,
+		MaxScale: s.maxExponent,
+	}
+}
+
+func parse(t *testing.T, sc *scanner, c *testCase) *scase {
+	ctx := ctx(sc, c)
+	s := scase{
+		t:   t,
+		ctx: ctx,
+		c: Case{
+			Prec:     ctx.Precision,
+			Op:       c.Op,
+			Mode:     roundingModesMapping[sc.rounding],
+			Inputs:   c.Inputs,
+			Output:   c.Output,
+			Excep:    c.Conditions,
+			ID:       c.ID,
+			MinScale: sc.minExponent,
+			MaxScale: sc.maxExponent,
+		},
+		z:     decimal.WithContext(ctx),
+		r:     string(c.Output.TrimQuotes()),
+		flags: convertConditions(c.Conditions),
+	}
+	switch len(c.Inputs) {
+	case 3:
+		s.u, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[2].TrimQuotes()))
+		fallthrough
+	case 2:
+		s.y, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[1].TrimQuotes()))
+		fallthrough
+	case 1:
+		s.x, _ = decimal.WithContext(ctx).SetString(string(c.Inputs[0].TrimQuotes()))
+	default:
+		t.Logf("%s\n%d inputs: %#v", s.c, len(c.Inputs), c)
+	}
+	return &s
+}
+
+func parseOld(t *testing.T, c Case, i int) *scase {
+	ctx := ctxOld(c)
 	s := scase{
 		t:     t,
 		ctx:   ctx,

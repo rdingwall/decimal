@@ -45,3 +45,4 @@ x.bash
 tags
 *.decTest
 dectest/parser.go
+dectest/scanner.go
