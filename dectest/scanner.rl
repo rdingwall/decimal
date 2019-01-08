@@ -5,6 +5,7 @@ import (
     "fmt"
     "io"
     "strconv"
+    "strings"
 )
 
 type scanner struct {
@@ -14,17 +15,9 @@ type scanner struct {
 	clamp       int
 	rounding    RoundingMode
 	extended    int
-	c           *testCase
+	c           *Case
 	s           *bufio.Scanner
-    err error
-}
-
-type testCase struct {
-    ID         string
-	Op         Op
-	Inputs     []Data
-	Output     Data
-	Conditions Condition
+    err         error
 }
 
 func NewScanner(r io.Reader) *scanner {
@@ -37,8 +30,7 @@ func (s *scanner) Scan() bool {
         if !s.s.Scan() {
             return false
         }
-        s.err = s.parse(s.s.Bytes())
-        if s.err != nil {
+        if s.err = s.parse(s.s.Bytes()); s.err != nil {
             return false
         }
         if s.c != nil {
@@ -48,7 +40,12 @@ func (s *scanner) Scan() bool {
     return false
 }
 
-func (s *scanner) Case() *testCase {
+func (s *scanner) Case() *Case {
+    s.c.Clamp = s.clamp == 1
+    s.c.Prec = s.precision
+    s.c.Mode = s.rounding
+    s.c.MinScale = s.minExponent
+    s.c.MaxScale = s.maxExponent
     return s.c
 }
 
@@ -61,6 +58,7 @@ func (s *scanner) parse(data []byte) (err error) {
     var (
         mark int
         ok bool
+        cond Condition
     )
 
     %%{
@@ -69,12 +67,17 @@ func (s *scanner) parse(data []byte) (err error) {
         action mark { mark = fpc }
 
         action set_id {
-            s.c = &testCase{ID: string(data[mark:fpc])}
+            s.c = &Case{ID: string(data[mark:fpc])}
+        }
+
+        action set_clamp {
+            if s.clamp, err = strconv.Atoi(string(data[mark:fpc])); err != nil {
+                return err
+            }
         }
 
         action set_op {
-            fmt.Printf("operations(%s) = %s\n", data[mark:fpc], operations[string(data[mark:fpc])])
-            if s.c.Op, ok = operations[string(data[mark:fpc])]; !ok {
+            if s.c.Op, ok = operations[strings.ToLower(string(data[mark:fpc]))]; !ok {
                 return fmt.Errorf("dectest: invalid op: %q", data[mark:fpc])
             }
         }
@@ -101,84 +104,91 @@ func (s *scanner) parse(data []byte) (err error) {
         }
 
         action set_rounding {
-            if s.rounding, ok = roundingModes[string(data[mark:fpc])]; !ok {
-                return fmt.Errorf("unknown rounding mode: %s", data[mark:fpc])
+            if s.rounding, ok = roundingModes[strings.ToLower(string(data[mark:fpc]))]; !ok {
+                return fmt.Errorf("unknown rounding mode: %q", data[mark:fpc])
             }
         }
 
         action add_input  { s.c.Inputs = append(s.c.Inputs, Data(data[mark:fpc])) }
         action set_output { s.c.Output = Data(data[mark:fpc]) }
-        action add_condition { s.c.Conditions |= conditionFromString(string(data[mark:fpc])) }
+        action add_condition { 
+            cond, ok = conditions[strings.ToLower(string(data[mark:fpc]))]
+            if !ok {
+                return fmt.Errorf("unknown condition: %q", data[mark:fpc])
+            }
+            s.c.Conditions |= cond
+        }
 
         precision = ( digit+ ) >mark %set_precision;
+        clamp = ( digit+ ) >mark %set_clamp;
         max_exponent = ( digit+ ) >mark %set_max_exponent;
         min_exponent = ( digit+ ) >mark %set_min_exponent;
 
         rounding = (
-            'ceiling'
-            | 'down'
-            | 'floor'
-            | 'half_down'
-            | 'half_even'
-            | 'half_up'
-            | 'up'
-            | '05up'
+            'ceiling'i
+            | 'down'i
+            | 'floor'i
+            | 'half_down'i
+            | 'half_even'i
+            | 'half_up'i
+            | 'up'i
+            | '05up'i
         ) >mark %set_rounding;
 
         id = ( alpha{3,} digit{3,} ) >mark %set_id;
 
         op = (
-            'abs'
-            | 'add'
-            | 'and'
-            | 'apply'
-            | 'canonical'
-            | 'class'
-            | 'compare'
-            | 'comparesig'
-            | 'comparetotal'
-            | 'comparetotalmag'
-            | 'copy'
-            | 'copyabs'
-            | 'copynegate'
-            | 'copysign'
-            | 'divide'
-            | 'divideint'
-            | 'exp'
-            | 'fma'
-            | 'invert'
-            | 'ln'
-            | 'log10'
-            | 'logb'
-            | 'max'
-            | 'min'
-            | 'maxmag'
-            | 'minmag'
-            | 'minus'
-            | 'multiply'
-            | 'nextminus'
-            | 'nextplus'
-            | 'nexttoward'
-            | 'or'
-            | 'plus'
-            | 'power'
-            | 'quantize'
-            | 'reduce'
-            | 'remainder'
-            | 'remaindernear'
-            | 'rescale'
-            | 'rotate'
-            | 'samequantum'
-            | 'scaleb'
-            | 'shift'
-            | 'squareroot'
-            | 'subtract'
-            | 'toEng'
-            | 'tointegral'
-            | 'tointegralx'
-            | 'toSci'
-            | 'trim'
-            | 'xor'
+            'abs'i
+            | 'add'i
+            | 'and'i
+            | 'apply'i
+            | 'canonical'i
+            | 'class'i
+            | 'compare'i
+            | 'comparesig'i
+            | 'comparetotal'i
+            | 'comparetotmag'i
+            | 'copy'i
+            | 'copyabs'i
+            | 'copynegate'i
+            | 'copysign'i
+            | 'divide'i
+            | 'divideint'i
+            | 'exp'i
+            | 'fma'i
+            | 'invert'i
+            | 'ln'i
+            | 'log10'i
+            | 'logb'i
+            | 'max'i
+            | 'min'i
+            | 'maxmag'i
+            | 'minmag'i
+            | 'minus'i
+            | 'multiply'i
+            | 'nextminus'i
+            | 'nextplus'i
+            | 'nexttoward'i
+            | 'or'i
+            | 'plus'i
+            | 'power'i
+            | 'quantize'i
+            | 'reduce'i
+            | 'remainder'i
+            | 'remaindernear'i
+            | 'rescale'i
+            | 'rotate'i
+            | 'samequantum'i
+            | 'scaleb'i
+            | 'shift'i
+            | 'squareroot'i
+            | 'subtract'i
+            | 'toEng'i
+            | 'tointegral'i
+            | 'tointegralx'i
+            | 'toSci'i
+            | 'trim'i
+            | 'xor'i
         ) >mark %set_op;
 
         quote = '\'' | '"';
@@ -204,26 +214,27 @@ func (s *scanner) parse(data []byte) (err error) {
 
         condition = (
             'Clamped'i
-            | 'Conversion_syntax'
-            | 'Division_by_zero'
-            | 'Division_impossible'
-            | 'Division_undefined'
-            | 'Inexact'
-            | 'Insufficient_storage'
-            | 'Invalid_context'
-            | 'Invalid_operation'
-            | 'Lost_digits'
-            | 'Overflow'
-            | 'Rounded'
-            | 'Subnormal'
-            | 'Underflow'
+            | 'Conversion_syntax'i
+            | 'Division_by_zero'i
+            | 'Division_impossible'i
+            | 'Division_undefined'i
+            | 'Inexact'i
+            | 'Insufficient_storage'i
+            | 'Invalid_context'i
+            | 'Invalid_operation'i
+            | 'Lost_digits'i
+            | 'Overflow'i
+            | 'Rounded'i
+            | 'Subnormal'i
+            | 'Underflow'i
         ) >mark %add_condition;
 
         main := (
-            ('precision:' space+ precision)
-            | ('maxexponent:' space+ max_exponent)
-            | ('minexponent:' space+ min_exponent)
-            | ('rounding:' space+ rounding)
+            ('precision:' space+ precision space* any*)
+            | ('clamp:' space+ clamp space* any*)
+            | ('maxexponent:' space+ max_exponent space* any*)
+            | ('minexponent:' space+ min_exponent space* any*)
+            | ('rounding:' space+ rounding space* any*)
             | (id space+ op space+ (quote? input quote? space+)+ '->' space+ quote? output quote? (space+ condition)*)
         );
 

@@ -1,213 +1,36 @@
 package dectest
 
 import (
-	"bufio"
 	"fmt"
-	"io"
-	"math/big"
 	"math/bits"
 	"strings"
-
-	"github.com/ericlagergren/decimal"
 )
-
-type RoundingMode int
-
-const (
-	Ceiling RoundingMode = iota
-	Down
-	Floor
-	HalfDown
-	HalfEven
-	HalfUp
-	Up
-	ZeroFiveUp
-)
-
-var roundingModes = map[string]RoundingMode{
-	"ceiling":   Ceiling,
-	"down":      Down,
-	"floor":     Floor,
-	"half_down": HalfDown,
-	"half_even": HalfEven,
-	"half_up":   HalfUp,
-	"up":        Up,
-	"05up":      ZeroFiveUp,
-}
-
-var roundingModesMapping = map[RoundingMode]big.RoundingMode{
-	Ceiling:  big.ToPositiveInf,
-	Down:     big.ToZero,
-	Floor:    big.ToNegativeInf,
-	HalfEven: big.ToNearestEven,
-	HalfUp:   big.ToNearestAway,
-}
-
-var conditionsMapping = map[Condition]decimal.Condition{
-	Clamped:             decimal.Clamped,
-	ConversionSyntax:    decimal.ConversionSyntax,
-	DivisionByZero:      decimal.DivisionByZero,
-	DivisionImpossible:  decimal.DivisionImpossible,
-	DivisionUndefined:   decimal.DivisionUndefined,
-	Inexact:             decimal.Inexact,
-	InsufficientStorage: decimal.InsufficientStorage,
-	InvalidContext:      decimal.InvalidContext,
-	InvalidOperation:    decimal.InvalidOperation,
-	Overflow:            decimal.Overflow,
-	Rounded:             decimal.Rounded,
-	Subnormal:           decimal.Subnormal,
-	Underflow:           decimal.Underflow,
-	// LostDigits:
-}
-
-func convertConditions(c Condition) decimal.Condition {
-	var r decimal.Condition
-	for k, v := range conditionsMapping {
-		if c&k == k {
-			r |= v
-		}
-	}
-	return r
-}
-
-var roundingModesOld = map[string]big.RoundingMode{
-	"ceiling": big.ToPositiveInf,
-
-	// (Round toward 0; truncate.) The discarded digits are ignored; the
-	// result is unchanged.
-	"down": big.ToZero,
-
-	// (Round toward -∞.) If all of the discarded digits are zero or if the sign
-	// is 0 the result is unchanged. Otherwise, the sign is 1 and the result
-	// coefficient should be incremented by 1.
-	"floor": big.ToNegativeInf,
-
-	// If the discarded digits represent greater than half (0.5) the value of a
-	// one in the next left position then the result coefficient should be
-	// incremented by 1 (rounded up). If they represent less than half, then
-	// the result coefficient is not adjusted (that is, the discarded digits are
-	// ignored).
-	"half_even": big.ToNearestEven,
-
-	// If the discarded digits represent greater than or equal to half (0.5) of
-	// the value of a one in the next left position then the result coefficient
-	// should be incremented by 1 (rounded up). Otherwise the discarded
-	// digits are ignored.
-	"half_up": big.ToNearestAway,
-}
-
-// ParseCases returns a slice of test cases in .decTest form read from r.
-func ParseCases(r io.Reader) (cases []Case, err error) {
-	s := bufio.NewScanner(r)
-	s.Split(bufio.ScanLines)
-
-	var precision int
-	var mode big.RoundingMode
-	var maxscale, minscale int
-	var clamp bool
-	var modeUnsupported bool
-
-	for s.Scan() {
-		p := s.Bytes()
-		// Skip empty lines and comments.
-		if len(p) == 0 || p[0] == '-' {
-			continue
-		}
-
-		//fmt.Println(strings.ToLower(string(p)))
-
-		// TODO: ragel-ify: move this state to a scanner.Next() struct
-		var prec int
-		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "precision: %d", &prec); n == 1 {
-			//	fmt.Printf("😃 Change prec '%d'\n", prec)
-			precision = prec
-		}
-
-		var mxs int
-		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "maxexponent: %d", &mxs); n == 1 {
-			//fmt.Printf("😃 Change max scale '%d'\n", mxs)
-			maxscale = mxs
-		}
-
-		var mns int
-		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "minexponent: %d", &mns); n == 1 {
-			//fmt.Printf("😃 Change min scale '%d'\n", mns)
-			minscale = mns
-		}
-
-		var cl int
-		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "clamp: %d", &cl); n == 1 {
-			//fmt.Printf("😃 Change clamp mode '%d' --> %v\n", cl, clamp)
-			if cl == 1 {
-				clamp = true
-			} else {
-				clamp = false
-			}
-		}
-
-		var rm string
-		if n, _ := fmt.Sscanf(strings.ToLower(string(p)), "rounding: %s", &rm); n == 1 {
-			r, ok := roundingModesOld[rm]
-			//fmt.Printf("😃 Change rounding mode '%s' --> %s\n", rm, r)
-			if !ok {
-				// unsupported rounding mode
-				// @TODO: model these unsupported rounding modes and explicitly t.Skip() them
-				modeUnsupported = true
-			} else {
-				mode = r
-				modeUnsupported = false
-			}
-		}
-
-		c, err := ParseCase(p)
-		if err != nil {
-			return nil, err
-		}
-
-		if c.ID == "" || modeUnsupported {
-			continue
-		}
-
-		c.Prec = precision
-		c.Mode = mode
-		c.MaxScale = maxscale
-		c.MinScale = minscale
-		if clamp {
-			c.Trap |= Clamped
-		}
-		cases = append(cases, c)
-	}
-	return cases, s.Err()
-}
 
 type Case struct {
-	Prefix   string
-	Prec     int
-	Op       Op
-	Mode     big.RoundingMode
-	Trap     Condition
-	Inputs   []Data
-	Output   Data
-	Excep    Condition
-	ID       string
-	MaxScale int
-	MinScale int
+	ID         string
+	Prec       int
+	Clamp      bool
+	Mode       RoundingMode
+	MaxScale   int
+	MinScale   int
+	Op         Op
+	Inputs     []Data
+	Output     Data
+	Conditions Condition
 }
 
-// TODO(eric): String should print the same format as the input
-
 func (c Case) String() string {
-	return fmt.Sprintf("%s%d [%s, %s]: %s(%s) = %s %s",
-		c.Prefix, c.Prec, c.Trap, c.Mode, c.Op,
-		join(c.Inputs, ", ", -1), c.Output, c.Excep)
+	return fmt.Sprintf("%s %d [%s, %s]: %s = %s %s",
+		c.ID, c.Prec, c.Mode, c.Op,
+		join(c.Inputs, ", ", -1), c.Output, c.Conditions)
 }
 
 // ShortString returns the same as String, except long data values are capped at
 // length digits.
 func (c Case) ShortString(length int) string {
-	return fmt.Sprintf("%s%d [%s, %s]: %s(%s) = %s %s",
-		c.Prefix, c.Prec, c.Trap, c.Mode, c.Op,
-		join(c.Inputs, ", ", length), trunc(c.Output, length), c.Excep)
+	return fmt.Sprintf("%s %d [%s, %s]: %s = %s %s",
+		c.ID, c.Prec, c.Mode, c.Op,
+		join(c.Inputs, ", ", length), trunc(c.Output, length), c.Conditions)
 }
 
 func trunc(d Data, l int) Data {
@@ -345,155 +168,158 @@ func (c Condition) String() string {
 	return strings.Join(a, ", ")
 }
 
-func ConditionFromString(s string) (r Condition) {
-	var ok bool
-	r, ok = valToCondition[s]
-	if !ok {
-		panic(fmt.Errorf("unknown condition '%s'", s))
-	}
-	return
-}
-
-var valToCondition = map[string]Condition{
-	"Inexact":           Inexact,
-	"Underflow":         Underflow, // tininess and 'extraordinary' error
-	"Overflow":          Overflow,
-	"Division_by_zero":  DivisionByZero,
-	"Invalid_operation": InvalidOperation,
-
-	// custom
-	"Clamped":              Clamped,
-	"Rounded":              Rounded,
-	"Conversion_syntax":    ConversionSyntax,
-	"Division_impossible":  DivisionImpossible,
-	"Division_undefined":   DivisionUndefined,
-	"Insufficient_storage": InsufficientStorage,
-	"Invalid_context":      InvalidContext,
-	"Subnormal":            Subnormal,
-
-	// @TODO delete above
-	// dectests
-}
-
 var conditions = map[string]Condition{
-	"Clamped":              Clamped,
-	"Conversion_syntax":    ConversionSyntax,
-	"Division_by_zero":     DivisionByZero,
-	"Division_impossible":  DivisionImpossible,
-	"Division_undefined":   DivisionUndefined,
-	"Inexact":              Inexact,
-	"Insufficient_storage": InsufficientStorage,
-	"Invalid_context":      InvalidContext,
-	"Invalid_operation":    InvalidOperation,
-	"Lost_digits":          LostDigits,
-	"Overflow":             Overflow,
-	"Rounded":              Rounded,
-	"Subnormal":            Subnormal,
-	"Underflow":            Underflow,
-}
-
-func conditionFromString(s string) Condition {
-	fmt.Printf("conditionFromString(%s)\n", s)
-	r, ok := conditions[s]
-	if !ok {
-		panic(fmt.Errorf("unknown condition '%s'", s))
-	}
-	return r
-}
-
-var valToMode = map[string]big.RoundingMode{
-	">":  big.ToPositiveInf,
-	"<":  big.ToNegativeInf,
-	"0":  big.ToZero,
-	"=0": big.ToNearestEven,
-	"=^": big.ToNearestAway,
-	"^":  big.AwayFromZero,
+	"clamped":              Clamped,
+	"conversion_syntax":    ConversionSyntax,
+	"division_by_zero":     DivisionByZero,
+	"division_impossible":  DivisionImpossible,
+	"division_undefined":   DivisionUndefined,
+	"inexact":              Inexact,
+	"insufficient_storage": InsufficientStorage,
+	"invalid_context":      InvalidContext,
+	"invalid_operation":    InvalidOperation,
+	"lost_digits":          LostDigits,
+	"overflow":             Overflow,
+	"rounded":              Rounded,
+	"subnormal":            Subnormal,
+	"underflow":            Underflow,
 }
 
 // Op is a specific operation the test case must perform.
 type Op uint8
 
 const (
-	Add Op = iota // add
-	Div
-	Sub
-	Apply
+	UnknownOp Op = iota
 	Abs
+	Add
+	And
+	Apply
+	Canonical
 	Class
-	Cmp
+	Compare
+	CompareSig
+	CompareTotal
+	CompareTotMag
 	Copy
+	CopyAbs
+	CopyNegate
 	CopySign
-	QuoInt
+	Divide
+	DivideInt
+	Exp
 	FMA
-	Log
+	Invert
+	Ln
 	Log10
+	LogB
 	Max
+	MaxMag
 	Min
-	Neg
-	Mul
-	Pow
+	MinMag
+	Minus
+	Multiply
+	NextMinus
+	NextPlus
+	NextToward
+	Or
+	Plus
+	Power
 	Quantize
 	Reduce
-	Rem
+	Remainder
+	RemainderNear
+	Rescale
+	Rotate
+	SameQuantum
+	ScaleB
 	Shift
-	RoundToInt
-	Sqrt
+	SquareRoot
+	Subtract
+	ToEng
+	ToIntegral
+	ToIntegralX
+	ToSci
+	Trim
+	Xor
 )
 
-var valToOp = map[string]Op{
-	"add":         Add,
-	"divide":      Div,
-	"subtract":    Sub,
-	"apply":       Apply,
-	"abs":         Abs,
-	"class":       Class,
-	"compare":     Cmp,
-	"copy":        Copy,
-	"copysign":    CopySign,
-	"divideint":   QuoInt,
-	"fma":         FMA,
-	"logb":        Log10,
-	"log10":       Log10,
-	"ln":          Log,
-	"max":         Max,
-	"min":         Min,
-	"minus":       Neg,
-	"multiply":    Mul,
-	"power":       Pow,
-	"quantize":    Quantize,
-	"reduce":      Reduce,
-	"remainder":   Rem,
-	"shift":       Shift,
-	"tointegralx": RoundToInt,
-	"squareroot":  Sqrt,
+var operations = map[string]Op{
+	"abs":           Abs,
+	"add":           Add,
+	"and":           And,
+	"apply":         Apply,
+	"canonical":     Canonical,
+	"class":         Class,
+	"compare":       Compare,
+	"comparesig":    CompareSig,
+	"comparetotal":  CompareTotal,
+	"comparetotmag": CompareTotMag,
+	"copy":          Copy,
+	"copyabs":       CopyAbs,
+	"copynegate":    CopyNegate,
+	"copysign":      CopySign,
+	"divide":        Divide,
+	"divideint":     DivideInt,
+	"exp":           Exp,
+	"fma":           FMA,
+	"invert":        Invert,
+	"ln":            Ln,
+	"log10":         Log10,
+	"logb":          LogB,
+	"max":           Max,
+	"maxmag":        MaxMag,
+	"min":           Min,
+	"minmag":        MinMag,
+	"minus":         Minus,
+	"multiply":      Multiply,
+	"nextminus":     NextMinus,
+	"nextplus":      NextPlus,
+	"nexttoward":    NextToward,
+	"or":            Or,
+	"plus":          Plus,
+	"power":         Power,
+	"quantize":      Quantize,
+	"reduce":        Reduce,
+	"remainder":     Remainder,
+	"remaindernear": RemainderNear,
+	"rescale":       Rescale,
+	"rotate":        Rotate,
+	"samequantum":   SameQuantum,
+	"scaleb":        ScaleB,
+	"shift":         Shift,
+	"squareroot":    SquareRoot,
+	"subtract":      Subtract,
+	"toeng":         ToEng,
+	"tointegral":    ToIntegral,
+	"tointegralx":   ToIntegralX,
+	"tosci":         ToSci,
+	"trim":          Trim,
+	"xor":           Xor,
 }
 
-var operations = map[string]Op{
-	"add":         Add,
-	"divide":      Div,
-	"subtract":    Sub,
-	"apply":       Apply,
-	"abs":         Abs,
-	"class":       Class,
-	"compare":     Cmp,
-	"copy":        Copy,
-	"copysign":    CopySign,
-	"divideint":   QuoInt,
-	"fma":         FMA,
-	"logb":        Log10,
-	"log10":       Log10,
-	"ln":          Log,
-	"max":         Max,
-	"min":         Min,
-	"minus":       Neg,
-	"multiply":    Mul,
-	"power":       Pow,
-	"quantize":    Quantize,
-	"reduce":      Reduce,
-	"remainder":   Rem,
-	"shift":       Shift,
-	"tointegralx": RoundToInt,
-	"squareroot":  Sqrt,
+type RoundingMode int
+
+const (
+	Ceiling RoundingMode = iota
+	Down
+	Floor
+	HalfDown
+	HalfEven
+	HalfUp
+	Up
+	ZeroFiveUp
+)
+
+var roundingModes = map[string]RoundingMode{
+	"ceiling":   Ceiling,
+	"down":      Down,
+	"floor":     Floor,
+	"half_down": HalfDown,
+	"half_even": HalfEven,
+	"half_up":   HalfUp,
+	"up":        Up,
+	"05up":      ZeroFiveUp,
 }
 
 //go:generate stringer -type=Op
+//go:generate stringer -type=RoundingMode

@@ -4,9 +4,9 @@ package dectest
 
 import "strconv"
 
-const _Op_name = "AddDivSubApplyAbsClassCmpCopyCopySignQuoIntFMALogLog10MaxMinNegMulPowQuantizeReduceRemShiftRoundToIntSqrt"
+const _Op_name = "UnknownOpAbsAddAndApplyCanonicalClassCompareCompareSigCompareTotalCompareTotMagCopyCopyAbsCopyNegateCopySignDivideDivideIntExpFMAInvertLnLog10LogBMaxMaxMagMinMinMagMinusMultiplyNextMinusNextPlusNextTowardOrPlusPowerQuantizeReduceRemainderRemainderNearRescaleRotateSameQuantumScaleBShiftSquareRootSubtractToEngToIntegralToIntegralXToSciTrimXor"
 
-var _Op_index = [...]uint8{0, 3, 6, 9, 14, 17, 22, 25, 29, 37, 43, 46, 49, 54, 57, 60, 63, 66, 69, 77, 83, 86, 91, 101, 105}
+var _Op_index = [...]uint16{0, 9, 12, 15, 18, 23, 32, 37, 44, 54, 66, 79, 83, 90, 100, 108, 114, 123, 126, 129, 135, 137, 142, 146, 149, 155, 158, 164, 169, 177, 186, 194, 204, 206, 210, 215, 223, 229, 238, 251, 258, 264, 275, 281, 286, 296, 304, 309, 319, 330, 335, 339, 342}
 
 func (i Op) String() string {
 	if i >= Op(len(_Op_index)-1) {
